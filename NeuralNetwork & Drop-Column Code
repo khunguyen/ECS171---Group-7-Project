@@ -1,0 +1,145 @@
+import seaborn as sns
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import confusion_matrix, accuracy_score, mean_squared_error, precision_score, recall_score
+
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, BatchNormalization
+from tensorflow.keras.optimizers import SGD
+
+import shutil
+
+#personal custom epoch printing
+class customEpoch(tf.keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        if (epoch + 1) % 50 == 0:  
+            print(f"Epoch: {epoch + 1}/{500}, Accuracy: {logs['accuracy']:.4f}, Loss: {logs['loss']:.4f}")
+            
+#create the function for easier modeling - soon
+# retracing occurs- why? Search later
+def create_model(x_train):
+    model = Sequential()
+    model.add(Dense(64, activation='relu', input_shape=(x_train.shape[1],)))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.5))
+
+    model.add(Dense(32, activation='relu'))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.5))
+
+    model.add(Dense(16, activation='relu'))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.5))
+
+    model.add(Dense(8, activation='relu'))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.5))
+
+    model.add(Dense(1, activation='sigmoid'))
+
+    optimizer = SGD(learning_rate=0.1)
+    model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
+    return model
+            
+def true_model(target):
+    print(f'For Target {target}:')
+    stpd[target] = stpd[target].apply(lambda x: 0 if x < 10 else 1)
+
+    x, y = stpd.drop(columns=['G1', 'G2', 'G3']), stpd[target].values.reshape(-1, 1)
+    scaler = MinMaxScaler()
+    x_scaled = scaler.fit_transform(x)
+    x_train, x_test, y_train, y_test = train_test_split(x_scaled, y, test_size=0.1, random_state=42)
+    
+    model = create_model(x_train)
+    model.fit(x_train, y_train, epochs=500, verbose=0, callbacks=[customEpoch()])
+
+    accuracies(x_train, y_train, x_test, y_test, model)
+
+    drop_column(x, y, target)
+
+    print('\n')
+    return model
+
+
+def accuracies(x_train, y_train, x_test, y_test, model):
+    test_loss, test_accuracy = model.evaluate(x_test, y_test, verbose=0)
+    print(f"Test Accuracy: {test_accuracy:.4f}, Test Loss: {test_loss:.4f}")
+
+    y_prob = model.predict(x_test, verbose=0)
+    y_pred = (y_prob > 0.5).astype(int)
+
+    conf_matrix = confusion_matrix(y_test, y_pred)
+    print("Confusion Matrix:\n", conf_matrix)
+
+    accuracy = accuracy_score(y_test, y_pred)
+    print(f"Accuracy: {accuracy:.4f}")
+
+    mse = mean_squared_error(y_test, y_pred)
+    print(f"Mean Squared Error: {mse:.4f}")
+
+    precision = precision_score(y_test, y_pred)
+    recall = recall_score(y_test, y_pred)
+    print(f"Precision: {precision:.4f}")
+    print(f"Recall: {recall:.4f}")
+
+#slow run time, possibly search for better techniques  
+def drop_column(x, y, target):
+    scaler = MinMaxScaler()
+    x_scaled = scaler.fit_transform(x)
+    x_train, x_test, y_train, y_test = train_test_split(x_scaled, y, test_size=0.1, random_state=42)
+
+    model = create_model(x_train)
+    model.fit(x_train, y_train, epochs=200, verbose=0)
+
+#baseline doesnt work, why? 09/04
+    baseline_accuracy = model.evaluate(x_test, y_test, verbose=0)[1] #works
+
+    accuracies_list = {}
+
+    for col in x.columns:
+        x_drop = x.drop(columns=[col])
+        x_scaled_drop = scaler.fit_transform(x_drop)
+
+        x_train_drop, x_test_drop, y_train_drop, y_test_drop = train_test_split(x_scaled_drop, y, test_size=0.1, random_state=42)
+        
+        model = create_model(x_train_drop)
+        model.fit(x_train_drop, y_train_drop, epochs=200, verbose=0)
+
+        droppedlol = model.evaluate(x_test_drop, y_test_drop, verbose=0)[1]
+
+        accuracy_drop = baseline_accuracy - droppedlol
+        accuracies_list[col] = accuracy_drop 
+#the list does not work, check later 09/04
+
+    importance = sorted(accuracies_list.items(), key=lambda item: item[1], reverse=True) #works now 09/08
+    print("Drop Column/Feature Importance (Drop in Accuracy):")
+    for feature, drop in importance:
+        print(f"{feature} had a drop of: {drop:.4f}")
+        
+        
+
+    
+
+
+original = 'student-por.csv'
+backup = 'student-por0copy.csv'
+shutil.copyfile(original, backup)
+
+stpd = pd.read_csv('student-por0copy.csv', delimiter=";")
+stpd = stpd[['studytime', 'health', 'absences', 'higher', 'failures', 'internet', 'schoolsup', 'paid', 'G1', 'G2', 'G3']]
+
+stpd['higher'] = stpd['higher'].map({'yes': 1, 'no': 0})
+stpd['internet'] = stpd['internet'].map({'yes': 1, 'no': 0})
+stpd['schoolsup'] = stpd['schoolsup'].map({'yes': 1, 'no': 0})
+stpd['paid'] = stpd['paid'].map({'yes': 1, 'no': 0})
+
+pear = stpd.corr(method='pearson')
+display(pear)
+
+true_model('G1')
+true_model('G2')
+true_model('G3')
