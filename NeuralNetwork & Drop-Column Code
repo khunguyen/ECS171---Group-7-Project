@@ -99,7 +99,9 @@ def drop_column(x, y, target):
     baseline_accuracy = model.evaluate(x_test, y_test, verbose=0)[1] #works
 
     accuracies_list = {}
-
+    
+    
+#fix later - ValueError in loop 09/04
     for col in x.columns:
         x_drop = x.drop(columns=[col])
         x_scaled_drop = scaler.fit_transform(x_drop)
@@ -113,8 +115,8 @@ def drop_column(x, y, target):
 
         accuracy_drop = baseline_accuracy - droppedlol
         accuracies_list[col] = accuracy_drop 
-#the list does not work, check later 09/04
 
+#the list does not work, check later 09/04
     importance = sorted(accuracies_list.items(), key=lambda item: item[1], reverse=True) #works now 09/08
     print("Drop Column/Feature Importance (Drop in Accuracy):")
     for feature, drop in importance:
